@@ -3,7 +3,7 @@ CREATE TABLE notifications
     id         SERIAL PRIMARY KEY,
     task_id    INTEGER   NOT NULL,
     notify_at  TIMESTAMP NOT NULL,
-    done       BOOLEAN            DEFAULT false,
+    done       BOOLEAN   NOT NULL DEFAULT false,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 

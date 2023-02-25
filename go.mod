@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/caarlos0/env/v6 v6.10.1
+	github.com/doug-martin/goqu/v9 v9.18.0
 	github.com/golang-migrate/migrate/v4 v4.15.2
 	github.com/jackc/pgx v3.6.2+incompatible
 	github.com/lib/pq v1.10.7
