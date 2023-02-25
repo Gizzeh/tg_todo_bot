@@ -47,18 +47,82 @@ func getTaskModelForCreation() models.Task {
 	}
 }
 
-func TestCRUD(t *testing.T) {
+func TestCreate(t *testing.T) {
 	repository, err := getTaskRepository()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	activeTasks, err := repository.GetAllActive()
+	testTaskForCreation := getTaskModelForCreation()
+
+	createdTask, err := repository.Create(testTaskForCreation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.deleteByID(createdTask.ID)
+
+	if createdTask.ID == 0 {
+		t.Fatal("task wasn't created but there are no errors")
+	}
+}
+
+func TestFindByID(t *testing.T) {
+	repository, err := getTaskRepository()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	activeTasksCount := len(activeTasks)
+	testTaskForCreation := getTaskModelForCreation()
+
+	createdTask, err := repository.Create(testTaskForCreation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.deleteByID(createdTask.ID)
+
+	findByIdResult, err := repository.FindByID(createdTask.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(createdTask, findByIdResult) {
+		t.Fatal("models not equal")
+	}
+}
+
+func TestUpdate(t *testing.T) {
+	repository, err := getTaskRepository()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testTaskForCreation := getTaskModelForCreation()
+
+	createdTask, err := repository.Create(testTaskForCreation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.deleteByID(createdTask.ID)
+
+	createdTask.Title = "Updated task title"
+	createdTask.Done = true
+	err = repository.Update(createdTask)
+
+	updatedTask, err := repository.FindByID(createdTask.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(createdTask, updatedTask) {
+		t.Fatal("models not equal")
+	}
+}
+
+func TestDeleteByID(t *testing.T) {
+	repository, err := getTaskRepository()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	testTaskForCreation := getTaskModelForCreation()
 
@@ -67,57 +131,124 @@ func TestCRUD(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if createdTask.ID == 0 {
-		t.Fatal("task wasn't created but there are no errors")
-	}
-
-	activeTasks, err = repository.GetAllActive()
+	_, err = repository.FindByID(createdTask.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if activeTasksCount == len(activeTasks) || len(activeTasks) == 0 {
-		t.Fatal("method repository.GetAllActive() wasn't found created task")
-	}
+	err = repository.deleteByID(createdTask.ID)
 
-	findByIdResult, err := repository.FindByID(createdTask.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !reflect.DeepEqual(findByIdResult, createdTask) {
-		t.Fatal("models not equal")
-	}
-
-	now := time.Now()
-	activeTasksFromToday, err := repository.SearchActiveByDeadline(&now, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	haveCreatedTask := false
-	for _, task := range activeTasksFromToday {
-		if task.ID == createdTask.ID {
-			haveCreatedTask = true
-			break
+	_, err = repository.FindByID(createdTask.ID)
+	if err == nil {
+		t.Fatal("model still exists after delete operation")
+	} else {
+		if !errors.Is(err, types.ErrNotFound) {
+			t.Fatal(err)
 		}
 	}
-	if !haveCreatedTask {
-		t.Fatal("can't find created model by deadline")
+}
+
+func TestGetAllActive(t *testing.T) {
+	repository, err := getTaskRepository()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	allActive, err := repository.GetAllActive()
+	allActiveBeforeCreationCount := len(allActive)
+
+	testTaskForCreation := getTaskModelForCreation()
+
+	createdTask, err := repository.Create(testTaskForCreation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.deleteByID(createdTask.ID)
+
+	allActive, err = repository.GetAllActive()
+
+	if len(allActive) == allActiveBeforeCreationCount || len(allActive) == 0 {
+		t.Fatal("errors occurred during GetAllActive logic")
+	}
+}
+
+func TestSearchActiveByDeadline(t *testing.T) {
+	repository, err := getTaskRepository()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testTaskForCreation := getTaskModelForCreation()
+
+	createdTask, err := repository.Create(testTaskForCreation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.deleteByID(createdTask.ID)
+
+	from := createdTask.Deadline.Add(-time.Hour)
+	to := createdTask.Deadline.Add(time.Hour)
+
+	searchResult, err := repository.SearchActiveByDeadline(&from, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var containCreatedTask = func(createdTask models.Task, searchResult []models.Task) bool {
+		found := false
+		for _, task := range searchResult {
+			if task.ID == createdTask.ID {
+				found = true
+				break
+			}
+		}
+		return found
+	}
+
+	if !containCreatedTask(createdTask, searchResult) {
+		t.Fatal("model not found")
+	}
+
+	searchResult, err = repository.SearchActiveByDeadline(nil, &to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containCreatedTask(createdTask, searchResult) {
+		t.Fatal("model not found")
+	}
+
+	searchResult, err = repository.SearchActiveByDeadline(&from, &to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containCreatedTask(createdTask, searchResult) {
+		t.Fatal("model not found")
+	}
+
+	_, err = repository.SearchActiveByDeadline(nil, nil)
+	if err == nil {
+		t.Fatal("from and to is nil but there are no errors")
+	}
+}
+
+func TestDeleteCompleted(t *testing.T) {
+	repository, err := getTaskRepository()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testTaskForCreation := getTaskModelForCreation()
+
+	createdTask, err := repository.Create(testTaskForCreation)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	createdTask.Done = true
+
 	err = repository.Update(createdTask)
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	findByIdResult, err = repository.FindByID(createdTask.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if findByIdResult.Done != false {
-		t.Fatal("update model wasn't work")
 	}
 
 	err = repository.DeleteCompleted()
@@ -125,12 +256,14 @@ func TestCRUD(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	findByIdResult, err = repository.FindByID(createdTask.ID)
-	if err != nil {
+	_, err = repository.FindByID(createdTask.ID)
+	if err == nil {
+		repository.deleteByID(createdTask.ID)
+		t.Fatal("model still exists after deletion")
+	} else {
 		if !errors.Is(err, types.ErrNotFound) {
+			repository.deleteByID(createdTask.ID)
 			t.Fatal(err)
 		}
-	} else {
-		t.Fatal("model still exists after delete")
 	}
 }

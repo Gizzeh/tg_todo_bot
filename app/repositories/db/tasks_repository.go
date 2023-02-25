@@ -250,6 +250,37 @@ func (repository *TasksRepository) Update(model models.Task) error {
 	return nil
 }
 
+func (repository *TasksRepository) deleteByID(ID int64) error {
+	query := goqu.Dialect("postgres").
+		Delete("tasks").
+		Where(
+			goqu.C("id").Eq(ID),
+		)
+
+	sql, args, _ := query.Prepared(true).ToSQL()
+
+	preparedStatementName := "DeleteTaskByIDTasks"
+	_, err := repository.dbInstance.Prepare(preparedStatementName, sql)
+	if err != nil {
+		repository.logger.Debugw(
+			`Repositories -> DB -> TasksRepository -> deleteByID -> repository.dbInstance.Prepare(preparedStatementName, sql)`,
+			"error", err.Error(), "preparedStatementName", preparedStatementName, "SQL", sql, "args", args,
+		)
+		return err
+	}
+
+	_, err = repository.dbInstance.Exec(preparedStatementName, args...)
+	if err != nil {
+		repository.logger.Debugw(
+			`Repositories -> DB -> TasksRepository -> deleteByID -> repository.dbInstance.Exec(preparedStatementName, args...)`,
+			"error", err.Error(), "preparedStatementName", preparedStatementName, "SQL", sql, "args", args,
+		)
+		return err
+	}
+
+	return nil
+}
+
 func (repository *TasksRepository) DeleteCompleted() error {
 	query := goqu.Dialect("postgres").
 		Delete("tasks").
