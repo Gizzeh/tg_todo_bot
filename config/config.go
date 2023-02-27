@@ -14,7 +14,7 @@ type Config struct {
 
 type Telegram struct {
 	BotToken string `env:"BOT_TOKEN,notEmpty"`
-	UserId   int64  `env:"USER_ID,notEmpty"`
+	AdminID  int64  `env:"ADMIN_ID,notEmpty"`
 }
 
 type Database struct {

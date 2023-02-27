@@ -1,0 +1,47 @@
+version: "3"
+
+networks:
+  tg_todo_bot_network:
+    name: tg_todo_bot_network
+
+services:
+  tg_todo_bot:
+    build:
+      dockerfile: Dockerfile
+    container_name: "tg_todo_bot"
+    networks:
+      tg_todo_bot_network:
+    restart: unless-stopped
+    entrypoint: ["/tg_todo_bot", "run"]
+    environment:
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_ADMIN_ID: "${TELEGRAM_ADMIN_ID}"
+      DB_HOST: "${DB_HOST}"
+      DB_PORT: "${DB_PORT}"
+      DB_DATABASE: "${DB_DATABASE}"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+    volumes:
+      - ./docker/tg_todo_bot/logs/:/logs/:rw
+  postgres:
+    image: postgres:latest
+    container_name: "tg_todo_bot_postgres"
+    networks:
+      tg_todo_bot_network:
+        aliases:
+          - tg_todo_bot_postgres
+    environment:
+      POSTGRES_DB: "${DB_DATABASE}"
+      POSTGRES_USER: "${DB_USER}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
+      PGDATA: "/var/lib/postgresql/data/pgdata"
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - ./docker/postgres/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_DATABASE}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped

@@ -1,4 +1,5 @@
 .env
 .idea
-/docker/postgres/pgdata/
+/docker/postgres/
+/docker/tg_todo_bot/
 /logs/

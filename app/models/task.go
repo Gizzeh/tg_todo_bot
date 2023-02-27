@@ -8,5 +8,9 @@ type Task struct {
 	Description string
 	Deadline    *time.Time
 	Done        bool
+	UserID      int64
 	CreatedAt   time.Time
+
+	User          *User           //relation OneToOne
+	Notifications *[]Notification //relation OneToMany
 }

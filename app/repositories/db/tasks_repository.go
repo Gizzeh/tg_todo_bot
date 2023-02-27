@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+//TODO: Добавить метод поиска задач пользователя
+
 type TasksRepository struct {
 	logger     *zap.SugaredLogger
 	dbInstance *pgx.ConnPool
@@ -37,6 +39,7 @@ func (repository *TasksRepository) Create(task models.Task) (models.Task, error)
 				"description": task.Description,
 				"deadline":    task.Deadline,
 				"done":        task.Done,
+				"user_id":     task.UserID,
 				"created_at":  now,
 			},
 		).
@@ -76,6 +79,7 @@ func (repository *TasksRepository) selectAllCols() *goqu.SelectDataset {
 			goqu.C("description"),
 			goqu.C("deadline"),
 			goqu.C("done"),
+			goqu.C("user_id"),
 			goqu.C("created_at"),
 		)
 }
@@ -92,7 +96,7 @@ func (repository *TasksRepository) SearchActiveByDeadline(from, to *time.Time) (
 
 	query := repository.selectAllCols().
 		Order(
-			goqu.C("deadline").Desc(),
+			goqu.C("deadline").Asc(),
 			goqu.C("title").Asc(),
 		).
 		Where(
@@ -141,6 +145,7 @@ func (repository *TasksRepository) SearchActiveByDeadline(from, to *time.Time) (
 			&task.Description,
 			&task.Deadline,
 			&task.Done,
+			&task.UserID,
 			&task.CreatedAt,
 		)
 		if err != nil {
@@ -160,7 +165,7 @@ func (repository *TasksRepository) SearchActiveByDeadline(from, to *time.Time) (
 func (repository *TasksRepository) GetAllActive() ([]models.Task, error) {
 	query := repository.selectAllCols().
 		Order(
-			goqu.C("deadline").Desc(),
+			goqu.C("deadline").Asc(),
 			goqu.C("title").Asc(),
 		).
 		Where(
@@ -198,6 +203,7 @@ func (repository *TasksRepository) GetAllActive() ([]models.Task, error) {
 			&task.Description,
 			&task.Deadline,
 			&task.Done,
+			&task.UserID,
 			&task.CreatedAt,
 		)
 		if err != nil {
@@ -223,6 +229,7 @@ func (repository *TasksRepository) Update(model models.Task) error {
 				"description": model.Description,
 				"deadline":    model.Deadline,
 				"done":        model.Done,
+				"user_id":     model.UserID,
 			},
 		)
 
@@ -250,7 +257,7 @@ func (repository *TasksRepository) Update(model models.Task) error {
 	return nil
 }
 
-func (repository *TasksRepository) deleteByID(ID int64) error {
+func (repository *TasksRepository) DeleteByID(ID int64) error {
 	query := goqu.Dialect("postgres").
 		Delete("tasks").
 		Where(
@@ -339,6 +346,7 @@ func (repository *TasksRepository) FindByID(ID int64) (models.Task, error) {
 		&task.Description,
 		&task.Deadline,
 		&task.Done,
+		&task.UserID,
 		&task.CreatedAt,
 	)
 	if err != nil {

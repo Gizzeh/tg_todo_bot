@@ -1,7 +1,7 @@
 CREATE TABLE notifications
 (
     id         SERIAL PRIMARY KEY,
-    task_id    INTEGER   NOT NULL,
+    task_id    INTEGER   NOT NULL REFERENCES tasks ON UPDATE CASCADE ON DELETE CASCADE,
     notify_at  TIMESTAMP NOT NULL,
     done       BOOLEAN   NOT NULL DEFAULT false,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()

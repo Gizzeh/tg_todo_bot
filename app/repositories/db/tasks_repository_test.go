@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+//TODO: Доработать тесты с учетом создания и удаления пользователя
+
 func getTaskRepository() (*TasksRepository, error) {
 	logger := zap_logger.InitLogger()
 
@@ -47,7 +49,7 @@ func getTaskModelForCreation() models.Task {
 	}
 }
 
-func TestCreate(t *testing.T) {
+func TestCreateTask(t *testing.T) {
 	repository, err := getTaskRepository()
 	if err != nil {
 		t.Fatal(err)
@@ -59,14 +61,14 @@ func TestCreate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer repository.deleteByID(createdTask.ID)
+	defer repository.DeleteByID(createdTask.ID)
 
 	if createdTask.ID == 0 {
 		t.Fatal("task wasn't created but there are no errors")
 	}
 }
 
-func TestFindByID(t *testing.T) {
+func TestFindTaskByID(t *testing.T) {
 	repository, err := getTaskRepository()
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +80,7 @@ func TestFindByID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer repository.deleteByID(createdTask.ID)
+	defer repository.DeleteByID(createdTask.ID)
 
 	findByIdResult, err := repository.FindByID(createdTask.ID)
 	if err != nil {
@@ -90,7 +92,7 @@ func TestFindByID(t *testing.T) {
 	}
 }
 
-func TestUpdate(t *testing.T) {
+func TestUpdateTask(t *testing.T) {
 	repository, err := getTaskRepository()
 	if err != nil {
 		t.Fatal(err)
@@ -102,7 +104,7 @@ func TestUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer repository.deleteByID(createdTask.ID)
+	defer repository.DeleteByID(createdTask.ID)
 
 	createdTask.Title = "Updated task title"
 	createdTask.Done = true
@@ -118,7 +120,7 @@ func TestUpdate(t *testing.T) {
 	}
 }
 
-func TestDeleteByID(t *testing.T) {
+func TestDeleteTaskByID(t *testing.T) {
 	repository, err := getTaskRepository()
 	if err != nil {
 		t.Fatal(err)
@@ -136,7 +138,7 @@ func TestDeleteByID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = repository.deleteByID(createdTask.ID)
+	err = repository.DeleteByID(createdTask.ID)
 
 	_, err = repository.FindByID(createdTask.ID)
 	if err == nil {
@@ -148,7 +150,7 @@ func TestDeleteByID(t *testing.T) {
 	}
 }
 
-func TestGetAllActive(t *testing.T) {
+func TestGetAllActiveTasks(t *testing.T) {
 	repository, err := getTaskRepository()
 	if err != nil {
 		t.Fatal(err)
@@ -163,7 +165,7 @@ func TestGetAllActive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer repository.deleteByID(createdTask.ID)
+	defer repository.DeleteByID(createdTask.ID)
 
 	allActive, err = repository.GetAllActive()
 
@@ -172,7 +174,7 @@ func TestGetAllActive(t *testing.T) {
 	}
 }
 
-func TestSearchActiveByDeadline(t *testing.T) {
+func TestSearchActiveTasksByDeadline(t *testing.T) {
 	repository, err := getTaskRepository()
 	if err != nil {
 		t.Fatal(err)
@@ -184,7 +186,7 @@ func TestSearchActiveByDeadline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer repository.deleteByID(createdTask.ID)
+	defer repository.DeleteByID(createdTask.ID)
 
 	from := createdTask.Deadline.Add(-time.Hour)
 	to := createdTask.Deadline.Add(time.Hour)
@@ -231,7 +233,7 @@ func TestSearchActiveByDeadline(t *testing.T) {
 	}
 }
 
-func TestDeleteCompleted(t *testing.T) {
+func TestDeleteCompletedTasks(t *testing.T) {
 	repository, err := getTaskRepository()
 	if err != nil {
 		t.Fatal(err)
@@ -258,11 +260,11 @@ func TestDeleteCompleted(t *testing.T) {
 
 	_, err = repository.FindByID(createdTask.ID)
 	if err == nil {
-		repository.deleteByID(createdTask.ID)
+		repository.DeleteByID(createdTask.ID)
 		t.Fatal("model still exists after deletion")
 	} else {
 		if !errors.Is(err, types.ErrNotFound) {
-			repository.deleteByID(createdTask.ID)
+			repository.DeleteByID(createdTask.ID)
 			t.Fatal(err)
 		}
 	}
