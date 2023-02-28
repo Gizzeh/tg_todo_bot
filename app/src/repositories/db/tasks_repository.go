@@ -5,10 +5,9 @@ import (
 	"github.com/doug-martin/goqu/v9"
 	_ "github.com/doug-martin/goqu/v9/dialect/postgres"
 	"github.com/jackc/pgx"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"tg_todo_bot/app/models"
-	"tg_todo_bot/app/repositories/types"
+	"tg_todo_bot/src/models"
+	"tg_todo_bot/src/repositories/types"
 	"time"
 )
 
@@ -73,6 +72,7 @@ func (repository *TasksRepository) Create(task models.Task) (models.Task, error)
 
 func (repository *TasksRepository) selectAllCols() *goqu.SelectDataset {
 	return goqu.Dialect("postgres").
+		From("tasks").
 		Select(
 			goqu.C("id"),
 			goqu.C("title"),
@@ -84,14 +84,14 @@ func (repository *TasksRepository) selectAllCols() *goqu.SelectDataset {
 		)
 }
 
-func (repository *TasksRepository) SearchActiveByDeadline(from, to *time.Time) ([]models.Task, error) {
+func (repository *TasksRepository) SearchActiveByDeadlineForUser(from, to *time.Time, userID int64) ([]models.Task, error) {
 	if from == nil && to == nil {
 		err := fmt.Errorf(`"from" and "to" are empty`)
 		repository.logger.Debugw(
 			`Repositories -> DB -> TasksRepository -> SearchByDeadline`,
 			"error", err.Error(),
 		)
-		return []models.Task{}, nil
+		return []models.Task{}, err
 	}
 
 	query := repository.selectAllCols().
@@ -101,6 +101,7 @@ func (repository *TasksRepository) SearchActiveByDeadline(from, to *time.Time) (
 		).
 		Where(
 			goqu.C("done").IsFalse(),
+			goqu.C("user_id").Eq(userID),
 		)
 
 	if from != nil {
@@ -159,10 +160,19 @@ func (repository *TasksRepository) SearchActiveByDeadline(from, to *time.Time) (
 		tasks = append(tasks, task)
 	}
 
+	err = repository.dbInstance.Deallocate(preparedStatementName)
+	if err != nil {
+		repository.logger.Debugw(
+			`Repositories -> DB -> TasksRepository -> SearchByDeadline -> repository.dbInstance.Deallocate(preparedStatementName)`,
+			"error", err.Error(), "preparedStatementName", preparedStatementName,
+		)
+		return []models.Task{}, err
+	}
+
 	return tasks, nil
 }
 
-func (repository *TasksRepository) GetAllActive() ([]models.Task, error) {
+func (repository *TasksRepository) GetAllActiveForUser(userID int64) ([]models.Task, error) {
 	query := repository.selectAllCols().
 		Order(
 			goqu.C("deadline").Asc(),
@@ -170,6 +180,7 @@ func (repository *TasksRepository) GetAllActive() ([]models.Task, error) {
 		).
 		Where(
 			goqu.C("done").IsFalse(),
+			goqu.C("user_id").Eq(userID),
 		)
 
 	sql, args, _ := query.Prepared(true).ToSQL()
@@ -320,45 +331,85 @@ func (repository *TasksRepository) DeleteCompleted() error {
 }
 
 func (repository *TasksRepository) FindByID(ID int64) (models.Task, error) {
-	query := repository.selectAllCols().
-		Where(
-			goqu.C("id").Eq(ID),
-		)
-
-	sql, args, _ := query.Prepared(true).ToSQL()
-
-	preparedStatementName := "FindTaskByID"
-	_, err := repository.dbInstance.Prepare(preparedStatementName, sql)
+	tasks, err := repository.FindByIDs([]int64{ID})
 	if err != nil {
 		repository.logger.Debugw(
 			`Repositories -> DB -> TasksRepository -> FindByID -> repository.dbInstance.Prepare(preparedStatementName, sql)`,
-			"error", err.Error(), "preparedStatementName", preparedStatementName, "SQL", sql, "args", args,
-		)
-		return models.Task{}, err
-	}
-
-	row := repository.dbInstance.QueryRow(preparedStatementName, args...)
-
-	var task models.Task
-	err = row.Scan(
-		&task.ID,
-		&task.Title,
-		&task.Description,
-		&task.Deadline,
-		&task.Done,
-		&task.UserID,
-		&task.CreatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			err = types.ErrNotFound
-		}
-		repository.logger.Debugw(
-			`Repositories -> DB -> TasksRepository -> FindByID -> row.Scan()`,
 			"error", err.Error(),
 		)
 		return models.Task{}, err
 	}
 
-	return task, nil
+	if len(tasks) == 0 {
+		err = types.ErrNotFound
+		repository.logger.Debugw(
+			`Repositories -> DB -> TasksRepository -> FindByID`,
+			"error", err.Error(),
+		)
+		return models.Task{}, err
+	}
+
+	return tasks[0], nil
+}
+
+func (repository *TasksRepository) FindByIDs(IDs []int64) ([]models.Task, error) {
+	query := repository.selectAllCols().
+		Where(
+			goqu.C("id").In(IDs),
+		)
+
+	sql, args, _ := query.Prepared(true).ToSQL()
+
+	preparedStatementName := "FindTasksByIDs"
+	_, err := repository.dbInstance.Prepare(preparedStatementName, sql)
+	if err != nil {
+		repository.logger.Debugw(
+			`Repositories -> DB -> TasksRepository -> FindByIDs -> repository.dbInstance.Prepare(preparedStatementName, sql)`,
+			"error", err.Error(), "preparedStatementName", preparedStatementName, "SQL", sql, "args", args,
+		)
+		return []models.Task{}, err
+	}
+
+	rows, err := repository.dbInstance.Query(preparedStatementName, args...)
+	if err != nil {
+		repository.logger.Debugw(
+			`Repositories -> DB -> TasksRepository -> FindByIDs -> repository.dbInstance.Query(preparedStatementName, args...)`,
+			"error", err.Error(),
+		)
+		return []models.Task{}, err
+	}
+
+	var tasks []models.Task
+	for rows.Next() {
+		var task models.Task
+		err = rows.Scan(
+			&task.ID,
+			&task.Title,
+			&task.Description,
+			&task.Deadline,
+			&task.Done,
+			&task.UserID,
+			&task.CreatedAt,
+		)
+		if err != nil {
+			repository.logger.Debugw(
+				`Repositories -> DB -> TasksRepository -> FindByIDs -> row.Scan()`,
+				"error", err.Error(),
+			)
+			return []models.Task{}, err
+		}
+
+		tasks = append(tasks, task)
+	}
+
+	err = repository.dbInstance.Deallocate(preparedStatementName)
+	if err != nil {
+		repository.logger.Debugw(
+			`Repositories -> DB -> TasksRepository -> FindByIDs -> repository.dbInstance.Deallocate(preparedStatementName)`,
+			"error", err.Error(), "preparedStatementName", preparedStatementName, "SQL", sql, "args", args,
+		)
+		return []models.Task{}, err
+	}
+
+	return tasks, nil
 }

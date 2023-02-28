@@ -5,8 +5,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const prefix = "MP_"
-
 type Config struct {
 	Telegram Telegram `envPrefix:"TELEGRAM_"`
 	Database Database `envPrefix:"DB_"`
@@ -28,9 +26,7 @@ type Database struct {
 func GetConfig() (Config, error) {
 	config := Config{}
 
-	err := env.Parse(&config, env.Options{
-		Prefix: prefix,
-	})
+	err := env.Parse(&config, env.Options{})
 
 	return config, errors.Wrap(err, "env.Parse")
 }

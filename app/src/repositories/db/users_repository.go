@@ -6,8 +6,8 @@ import (
 	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"tg_todo_bot/app/models"
-	"tg_todo_bot/app/repositories/types"
+	"tg_todo_bot/src/models"
+	"tg_todo_bot/src/repositories/types"
 	"time"
 )
 
@@ -35,7 +35,8 @@ func (repository *UsersRepository) Create(user models.User) (models.User, error)
 				"telegram_id": user.TelegramID,
 				"created_at":  now,
 			},
-		)
+		).
+		Returning("id")
 
 	sql, args, _ := query.Prepared(true).ToSQL()
 
@@ -49,7 +50,8 @@ func (repository *UsersRepository) Create(user models.User) (models.User, error)
 		return models.User{}, err
 	}
 
-	_, err = repository.dbInstance.Exec(preparedStatementName, args...)
+	row := repository.dbInstance.QueryRow(preparedStatementName, args...)
+	err = row.Scan(&user.ID)
 	if err != nil {
 		var pgError pgx.PgError
 		if errors.As(err, &pgError) {
@@ -72,6 +74,7 @@ func (repository *UsersRepository) FindByTelegramID(telegramID int64) (models.Us
 	query := goqu.Dialect("postgres").
 		From("users").
 		Select(
+			goqu.C("id"),
 			goqu.C("telegram_id"),
 			goqu.C("created_at"),
 		).
@@ -103,6 +106,7 @@ func (repository *UsersRepository) FindByTelegramID(telegramID int64) (models.Us
 	var user models.User
 
 	err = row.Scan(
+		&user.ID,
 		&user.TelegramID,
 		&user.CreatedAt,
 	)

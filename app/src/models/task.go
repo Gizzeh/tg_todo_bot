@@ -11,6 +11,6 @@ type Task struct {
 	UserID      int64
 	CreatedAt   time.Time
 
-	User          *User           //relation OneToOne
-	Notifications *[]Notification //relation OneToMany
+	User         *User         //relation OneToOne
+	Notification *Notification //relation OneToOne
 }

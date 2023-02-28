@@ -4,8 +4,10 @@ import (
 	"github.com/doug-martin/goqu/v9"
 	_ "github.com/doug-martin/goqu/v9/dialect/postgres"
 	"github.com/jackc/pgx"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"tg_todo_bot/app/models"
+	"tg_todo_bot/src/models"
+	"tg_todo_bot/src/repositories/types"
 	"time"
 )
 
@@ -32,7 +34,6 @@ func (repository *NotificationsRepository) Create(notification models.Notificati
 			goqu.Record{
 				"task_id":    notification.TaskID,
 				"notify_at":  notification.NotifyAt,
-				"done":       notification.Done,
 				"created_at": now,
 			},
 		).
@@ -54,6 +55,13 @@ func (repository *NotificationsRepository) Create(notification models.Notificati
 
 	err = row.Scan(&notification.ID)
 	if err != nil {
+		var pgError pgx.PgError
+		if errors.As(err, &pgError) {
+			//Нарушение уникальности
+			if pgError.Code == "23505" {
+				err = types.ErrAlreadyExist
+			}
+		}
 		repository.logger.Debugw(
 			`Repositories -> DB -> NotificationsRepository -> Create -> row.Scan()`,
 			"error", err.Error(),
@@ -71,7 +79,6 @@ func (repository *NotificationsRepository) Update(notification models.Notificati
 			goqu.Record{
 				"task_id":   notification.TaskID,
 				"notify_at": notification.NotifyAt,
-				"done":      notification.Done,
 			},
 		)
 
@@ -137,20 +144,15 @@ func (repository *NotificationsRepository) selectAllCols() *goqu.SelectDataset {
 			goqu.C("id"),
 			goqu.C("task_id"),
 			goqu.C("notify_at"),
-			goqu.C("done"),
 			goqu.C("created_at"),
 		)
 
 }
 
-func (repository *NotificationsRepository) GetTasksActiveNotifications(tasksIds []int64) (map[int64][]models.Notification, error) {
+func (repository *NotificationsRepository) GetTaskNotification(taskId int64) (models.Notification, error) {
 	query := repository.selectAllCols().
 		Where(
-			goqu.C("task_id").In(tasksIds),
-			goqu.C("done").IsFalse(),
-		).
-		Order(
-			goqu.C("notify_at").Asc(),
+			goqu.C("task_id").Eq(taskId),
 		)
 
 	sql, args, _ := query.Prepared(true).ToSQL()
@@ -162,61 +164,36 @@ func (repository *NotificationsRepository) GetTasksActiveNotifications(tasksIds 
 			`Repositories -> DB -> NotificationsRepository -> GetTasksActiveNotifications -> repository.dbInstance.Prepare(preparedStatementName, sql)`,
 			"error", err.Error(), "preparedStatementName", preparedStatementName, "SQL", sql, "args", args,
 		)
-		return map[int64][]models.Notification{}, err
+		return models.Notification{}, err
 	}
 
-	rows, err := repository.dbInstance.Query(preparedStatementName, args...)
+	row := repository.dbInstance.QueryRow(preparedStatementName, args...)
+
+	var notification models.Notification
+
+	err = row.Scan(
+		&notification.ID,
+		&notification.TaskID,
+		&notification.NotifyAt,
+		&notification.CreatedAt,
+	)
 	if err != nil {
-		repository.logger.Debugw(
-			`Repositories -> DB -> NotificationsRepository -> GetTasksActiveNotifications -> repository.dbInstance.Query(preparedStatementName, args...)`,
-			"error", err.Error(), "preparedStatementName", preparedStatementName, "SQL", sql, "args", args,
-		)
-		return map[int64][]models.Notification{}, err
-	}
-
-	tasksNotificationsMap := map[int64][]models.Notification{}
-	for rows.Next() {
-		var notification models.Notification
-		err = rows.Scan(
-			&notification.ID,
-			&notification.TaskID,
-			&notification.NotifyAt,
-			&notification.Done,
-			&notification.CreatedAt,
-		)
-		if err != nil {
-			repository.logger.Debugw(
-				`Repositories -> DB -> NotificationsRepository -> GetTasksActiveNotifications -> rows.Scan()`,
-				"error", err.Error(),
-			)
-			return map[int64][]models.Notification{}, err
+		if errors.Is(err, pgx.ErrNoRows) {
+			err = types.ErrNotFound
 		}
-
-		notifications, exist := tasksNotificationsMap[notification.TaskID]
-		if exist {
-			notifications = append(notifications, notification)
-		} else {
-			notifications = []models.Notification{notification}
-		}
-		tasksNotificationsMap[notification.TaskID] = notifications
-	}
-
-	err = repository.dbInstance.Deallocate(preparedStatementName)
-	if err != nil {
 		repository.logger.Debugw(
-			`Repositories -> DB -> NotificationsRepository -> GetTasksActiveNotifications -> repository.dbInstance.Deallocate(preparedStatementName)`,
-			"error", err.Error(), "preparedStatementName", preparedStatementName,
+			`Repositories -> DB -> NotificationsRepository -> GetTasksActiveNotifications -> rows.Scan()`,
+			"error", err.Error(),
 		)
-		return map[int64][]models.Notification{}, err
+		return models.Notification{}, err
 	}
 
-	return tasksNotificationsMap, nil
+	return notification, nil
 }
 
 func (repository *NotificationsRepository) GetUpcoming(upcomingTo time.Time) ([]models.Notification, error) {
 	query := repository.selectAllCols().
 		Where(
-			goqu.C("done").IsFalse(),
 			goqu.C("notify_at").Lte(upcomingTo),
 		).
 		Order(
@@ -251,7 +228,6 @@ func (repository *NotificationsRepository) GetUpcoming(upcomingTo time.Time) ([]
 			&notification.ID,
 			&notification.TaskID,
 			&notification.NotifyAt,
-			&notification.Done,
 			&notification.CreatedAt,
 		)
 		if err != nil {
@@ -268,33 +244,43 @@ func (repository *NotificationsRepository) GetUpcoming(upcomingTo time.Time) ([]
 	return notifications, nil
 }
 
-func (repository *NotificationsRepository) DeleteCompleted() error {
-	query := goqu.Dialect("postgres").
-		Delete("notifications").
+func (repository *NotificationsRepository) FindByID(ID int64) (models.Notification, error) {
+	query := repository.selectAllCols().
 		Where(
-			goqu.C("done").IsTrue(),
+			goqu.C("id").Eq(ID),
 		)
 
 	sql, args, _ := query.Prepared(true).ToSQL()
 
-	preparedStatementName := "DeleteCompletedNotifications"
+	preparedStatementName := "FindNotificationByID"
 	_, err := repository.dbInstance.Prepare(preparedStatementName, sql)
 	if err != nil {
 		repository.logger.Debugw(
-			`Repositories -> DB -> NotificationsRepository -> DeleteCompleted -> repository.dbInstance.Prepare(preparedStatementName, sql)`,
+			`Repositories -> DB -> NotificationsRepository -> FindByID -> repository.dbInstance.Prepare(preparedStatementName, sql)`,
 			"error", err.Error(), "preparedStatementName", preparedStatementName, "SQL", sql, "args", args,
 		)
-		return err
+		return models.Notification{}, err
 	}
 
-	_, err = repository.dbInstance.Exec(preparedStatementName, args...)
+	row := repository.dbInstance.QueryRow(preparedStatementName, args...)
+
+	var notification models.Notification
+	err = row.Scan(
+		&notification.ID,
+		&notification.TaskID,
+		&notification.NotifyAt,
+		&notification.CreatedAt,
+	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			err = types.ErrNotFound
+		}
 		repository.logger.Debugw(
-			`Repositories -> DB -> NotificationsRepository -> DeleteCompleted -> repository.dbInstance.Exec(preparedStatementName, args...)`,
+			`Repositories -> DB -> NotificationsRepository -> FindByID -> row.Scan()`,
 			"error", err.Error(), "preparedStatementName", preparedStatementName, "SQL", sql, "args", args,
 		)
-		return err
+		return models.Notification{}, err
 	}
 
-	return nil
+	return notification, nil
 }

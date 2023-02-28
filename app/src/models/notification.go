@@ -6,8 +6,7 @@ type Notification struct {
 	ID        int64
 	TaskID    int64
 	NotifyAt  time.Time
-	Done      bool
 	CreatedAt time.Time
 
-	Task *Task //relation OneToMany
+	Task *Task //relation OneToOne
 }

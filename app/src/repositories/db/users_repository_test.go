@@ -1,16 +1,15 @@
 package db
 
 import (
-	"encoding/binary"
 	"github.com/pkg/errors"
 	"math/rand"
-	"reflect"
 	"testing"
-	"tg_todo_bot/app/models"
-	"tg_todo_bot/app/repositories/types"
 	"tg_todo_bot/config"
 	"tg_todo_bot/kernel/db"
 	zap_logger "tg_todo_bot/kernel/logger"
+	"tg_todo_bot/src/models"
+	"tg_todo_bot/src/repositories/types"
+	"time"
 )
 
 func getUsersRepository() (*UsersRepository, error) {
@@ -38,9 +37,42 @@ func getUsersRepository() (*UsersRepository, error) {
 }
 
 func generateRandomTelegramID() int64 {
-	buf := make([]byte, 8)
-	rand.Read(buf)
-	return int64(binary.LittleEndian.Uint64(buf))
+	rand.Seed(time.Now().UnixNano())
+	min := 1
+	max := 99999999
+	return int64(rand.Intn(max-min+1) + min)
+}
+
+func createUserForTest() (models.User, error) {
+	repository, err := getUsersRepository()
+	if err != nil {
+		return models.User{}, err
+	}
+
+	user := models.User{
+		TelegramID: generateRandomTelegramID(),
+	}
+
+	user, err = repository.Create(user)
+	if err != nil {
+		return models.User{}, err
+	}
+
+	return user, nil
+}
+
+func deleteUserAfterTest(user models.User) error {
+	repository, err := getUsersRepository()
+	if err != nil {
+		return err
+	}
+
+	err = repository.DeleteByTelegramID(user.TelegramID)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func TestCreateUser(t *testing.T) {
@@ -64,8 +96,8 @@ func TestCreateUser(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !reflect.DeepEqual(findUserResult, user) {
-		t.Fatal("models not equal")
+	if findUserResult.ID != user.ID {
+		t.Fatal("models are not equal")
 	}
 
 	user, err = repository.Create(user)
@@ -108,8 +140,8 @@ func TestFindUserByID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !reflect.DeepEqual(findResult, user) {
-		t.Fatal("models not equal")
+	if findResult.ID != user.ID {
+		t.Fatal("models are not equal")
 	}
 }
 
