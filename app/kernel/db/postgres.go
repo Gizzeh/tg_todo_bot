@@ -3,7 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/pkg/errors"
 	"time"
 )
@@ -40,28 +40,19 @@ func (d *PG) GetConnUrl() string {
 	)
 }
 
-func (d *PG) OpenPool() (*pgx.ConnPool, error) {
-	poolConf := pgx.ConnPoolConfig{
-		ConnConfig: pgx.ConnConfig{
-			Host:     d.host,
-			Port:     uint16(d.port),
-			Database: d.database,
-			User:     d.user,
-			Password: d.password,
-		},
-		MaxConnections: d.maxConnections,
-	}
-	pgConn, err := pgx.NewConnPool(poolConf)
+func (d *PG) OpenPool() (*pgxpool.Pool, error) {
+	connUrl := d.GetConnUrl()
+	pgPool, err := pgxpool.Connect(context.Background(), connUrl)
 	if err != nil {
-		return nil, errors.Wrap(err, "pgx.NewConnPool(poolConf)")
+		return nil, errors.Wrap(err, fmt.Sprintf(`pgxpool.New(connUrl = '%s')`, connUrl))
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
-	_, err = pgConn.ExecEx(ctx, ";", &pgx.QueryExOptions{})
+	_, err = pgPool.Exec(ctx, ";")
 	if err != nil {
-		return nil, errors.Wrap(err, `pgConn.ExecEx(ctx, ";", &pgx.QueryExOptions{})`)
+		return nil, errors.Wrap(err, `pgPool.Exec(ctx, ";")`)
 	}
 
-	return pgConn, nil
+	return pgPool, nil
 }

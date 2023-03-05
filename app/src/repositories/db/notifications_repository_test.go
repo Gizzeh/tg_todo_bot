@@ -44,9 +44,10 @@ func getNotificationModelForCreation() (models.Notification, error) {
 
 	afterAnHour := time.Now().Add(time.Hour)
 	return models.Notification{
-		TaskID:   task.ID,
-		NotifyAt: afterAnHour,
-		Task:     &task,
+		TaskID:         task.ID,
+		NotifyAt:       afterAnHour,
+		RepeatInterval: time.Hour,
+		Task:           &task,
 	}, nil
 }
 
@@ -178,7 +179,7 @@ func TestGetTaskNotification(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	taskNotification, err := repository.GetTaskNotification(notificationModel.TaskID)
+	taskNotification, err := repository.FindByTaskID(notificationModel.TaskID)
 	if err != nil {
 		t.Fatal(err)
 	}

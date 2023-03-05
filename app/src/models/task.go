@@ -6,7 +6,7 @@ type Task struct {
 	ID          int64
 	Title       string
 	Description string
-	Deadline    *time.Time
+	Datetime    *time.Time
 	Done        bool
 	UserID      int64
 	CreatedAt   time.Time

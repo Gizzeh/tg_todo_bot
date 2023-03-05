@@ -1,10 +1,11 @@
 CREATE TABLE notifications
 (
-    id         SERIAL PRIMARY KEY,
-    task_id    INTEGER   NOT NULL UNIQUE,
-    notify_at  TIMESTAMP NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    CONSTRAINT fk_task FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    id              SERIAL PRIMARY KEY,
+    task_id         INTEGER   NOT NULL UNIQUE,
+    notify_at       TIMESTAMP NOT NULL,
+    repeat_interval BIGINT NOT NULL,
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT fk_task FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE
 );
 
 CREATE INDEX notifications_index_task_id ON notifications (task_id);

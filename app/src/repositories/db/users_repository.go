@@ -1,9 +1,12 @@
 package db
 
 import (
+	"context"
 	"github.com/doug-martin/goqu/v9"
 	_ "github.com/doug-martin/goqu/v9/dialect/postgres"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"tg_todo_bot/src/models"
@@ -13,12 +16,12 @@ import (
 
 type UsersRepository struct {
 	logger     *zap.SugaredLogger
-	dbInstance *pgx.ConnPool
+	dbInstance *pgxpool.Pool
 }
 
 func NewUsersRepository(
 	logger *zap.SugaredLogger,
-	dbInstance *pgx.ConnPool,
+	dbInstance *pgxpool.Pool,
 ) *UsersRepository {
 	return &UsersRepository{
 		logger:     logger,
@@ -40,20 +43,10 @@ func (repository *UsersRepository) Create(user models.User) (models.User, error)
 
 	sql, args, _ := query.Prepared(true).ToSQL()
 
-	preparedStatementName := "CreateUser"
-	_, err := repository.dbInstance.Prepare(preparedStatementName, sql)
+	row := repository.dbInstance.QueryRow(context.Background(), sql, args...)
+	err := row.Scan(&user.ID)
 	if err != nil {
-		repository.logger.Debugw(
-			`Repositories -> DB -> UsersRepository -> Create -> repository.dbInstance.Prepare(preparedStatementName, sql)`,
-			"error", err.Error(), "preparedStatementName", preparedStatementName, "SQL", sql, "args", args,
-		)
-		return models.User{}, err
-	}
-
-	row := repository.dbInstance.QueryRow(preparedStatementName, args...)
-	err = row.Scan(&user.ID)
-	if err != nil {
-		var pgError pgx.PgError
+		var pgError *pgconn.PgError
 		if errors.As(err, &pgError) {
 			//Нарушение уникальности
 			if pgError.Code == "23505" {
@@ -61,8 +54,8 @@ func (repository *UsersRepository) Create(user models.User) (models.User, error)
 			}
 		}
 		repository.logger.Debugw(
-			`Repositories -> DB -> UsersRepository -> Create -> repository.dbInstance.Exec(preparedStatementName, args...)`,
-			"error", err.Error(), "preparedStatementName", preparedStatementName, "SQL", sql, "args", args,
+			`Repositories -> DB -> UsersRepository -> Create -> repository.dbInstance.Exec(sql, args...)`,
+			"error", err.Error(), "SQL", sql, "args", args,
 		)
 		return models.User{}, err
 	}
@@ -84,28 +77,11 @@ func (repository *UsersRepository) FindByTelegramID(telegramID int64) (models.Us
 
 	sql, args, _ := query.Prepared(true).ToSQL()
 
-	preparedStatementName := "FindUserByTelegramID"
-	_, err := repository.dbInstance.Prepare(preparedStatementName, sql)
-	if err != nil {
-		repository.logger.Debugw(
-			`Repositories -> DB -> UsersRepository -> FindByTelegramID -> repository.dbInstance.Prepare(preparedStatementName, sql)`,
-			"error", err.Error(), "preparedStatementName", preparedStatementName, "SQL", sql, "args", args,
-		)
-		return models.User{}, err
-	}
-
-	row := repository.dbInstance.QueryRow(preparedStatementName, args...)
-	if err != nil {
-		repository.logger.Debugw(
-			`Repositories -> DB -> UsersRepository -> FindByTelegramID -> repository.dbInstance.QueryRow(preparedStatementName, args...)`,
-			"error", err.Error(), "preparedStatementName", preparedStatementName, "SQL", sql, "args", args,
-		)
-		return models.User{}, err
-	}
+	row := repository.dbInstance.QueryRow(context.Background(), sql, args...)
 
 	var user models.User
 
-	err = row.Scan(
+	err := row.Scan(
 		&user.ID,
 		&user.TelegramID,
 		&user.CreatedAt,
@@ -133,21 +109,11 @@ func (repository *UsersRepository) DeleteByTelegramID(telegramID int64) error {
 
 	sql, args, _ := query.Prepared(true).ToSQL()
 
-	preparedStatementName := "DeleteUserByTelegramID"
-	_, err := repository.dbInstance.Prepare(preparedStatementName, sql)
+	_, err := repository.dbInstance.Exec(context.Background(), sql, args...)
 	if err != nil {
 		repository.logger.Debugw(
-			`Repositories -> DB -> UsersRepository -> DeleteByTelegramID -> repository.dbInstance.Prepare(preparedStatementName, sql)`,
-			"error", err.Error(), "preparedStatementName", preparedStatementName, "SQL", sql, "args", args,
-		)
-		return err
-	}
-
-	_, err = repository.dbInstance.Exec(preparedStatementName, args...)
-	if err != nil {
-		repository.logger.Debugw(
-			`Repositories -> DB -> UsersRepository -> DeleteByTelegramID -> repository.dbInstance.Exec(preparedStatementName, args...)`,
-			"error", err.Error(), "preparedStatementName", preparedStatementName, "SQL", sql, "args", args,
+			`Repositories -> DB -> UsersRepository -> DeleteByTelegramID -> repository.dbInstance.Exec(sql, args...)`,
+			"error", err.Error(), "SQL", sql, "args", args,
 		)
 		return err
 	}

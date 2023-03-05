@@ -47,7 +47,7 @@ func getTaskModelForCreation() (models.Task, error) {
 	return models.Task{
 		Title:       "Test task title",
 		Description: "Test task description",
-		Deadline:    &tomorrow,
+		Datetime:    &tomorrow,
 		Done:        false,
 		UserID:      user.ID,
 		User:        &user,
@@ -278,7 +278,7 @@ func TestGetAllActiveTasks(t *testing.T) {
 	}
 }
 
-func TestSearchActiveTasksByDeadline(t *testing.T) {
+func TestSearchActiveTasksByDatetime(t *testing.T) {
 	repository, err := getTaskRepository()
 	if err != nil {
 		t.Fatal(err)
@@ -294,10 +294,10 @@ func TestSearchActiveTasksByDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	from := taskModel.Deadline.Add(-time.Hour)
-	to := taskModel.Deadline.Add(time.Hour)
+	from := taskModel.Datetime.Add(-time.Hour)
+	to := taskModel.Datetime.Add(time.Hour)
 
-	searchResult, err := repository.SearchActiveByDeadlineForUser(&from, nil, taskModel.UserID)
+	searchResult, err := repository.SearchActiveByDatetimeForUser(&from, nil, taskModel.UserID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +317,7 @@ func TestSearchActiveTasksByDeadline(t *testing.T) {
 		t.Fatal("model not found")
 	}
 
-	searchResult, err = repository.SearchActiveByDeadlineForUser(nil, &to, taskModel.UserID)
+	searchResult, err = repository.SearchActiveByDatetimeForUser(nil, &to, taskModel.UserID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -325,7 +325,7 @@ func TestSearchActiveTasksByDeadline(t *testing.T) {
 		t.Fatal("model not found")
 	}
 
-	searchResult, err = repository.SearchActiveByDeadlineForUser(&from, &to, taskModel.UserID)
+	searchResult, err = repository.SearchActiveByDatetimeForUser(&from, &to, taskModel.UserID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +333,7 @@ func TestSearchActiveTasksByDeadline(t *testing.T) {
 		t.Fatal("model not found")
 	}
 
-	_, err = repository.SearchActiveByDeadlineForUser(nil, nil, taskModel.UserID)
+	_, err = repository.SearchActiveByDatetimeForUser(nil, nil, taskModel.UserID)
 	if err == nil {
 		t.Fatal("from and to is nil but there are no errors")
 	}
