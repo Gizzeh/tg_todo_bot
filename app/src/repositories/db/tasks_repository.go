@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"go.uber.org/zap"
 	"tg_todo_bot/src/models"
-	"tg_todo_bot/src/repositories/types"
 	"time"
 )
 
@@ -263,31 +262,46 @@ func (repository *TasksRepository) DeleteCompleted() error {
 }
 
 func (repository *TasksRepository) FindByID(ID int64) (models.Task, error) {
-	tasks, err := repository.FindByIDs([]int64{ID})
-	if err != nil {
-		repository.logger.Debugw(
-			`Repositories -> DB -> TasksRepository -> FindByID -> repository.dbInstance.Prepare(sql, sql)`,
-			"error", err.Error(),
-		)
-		return models.Task{}, err
-	}
-
-	if len(tasks) == 0 {
-		err = types.ErrNotFound
-		repository.logger.Debugw(
-			`Repositories -> DB -> TasksRepository -> FindByID`,
-			"error", err.Error(),
-		)
-		return models.Task{}, err
-	}
-
-	return tasks[0], nil
-}
-
-func (repository *TasksRepository) FindByIDs(IDs []int64) ([]models.Task, error) {
 	query := repository.selectAllCols().
 		Where(
-			goqu.C("id").In(IDs),
+			goqu.C("id").Eq(ID),
+		)
+
+	sql, args, _ := query.Prepared(true).ToSQL()
+
+	row := repository.dbInstance.QueryRow(context.Background(), sql, args...)
+
+	var task models.Task
+	err := row.Scan(
+		&task.ID,
+		&task.Title,
+		&task.Description,
+		&task.Datetime,
+		&task.Done,
+		&task.UserID,
+		&task.CreatedAt,
+	)
+	if err != nil {
+		repository.logger.Debugw(
+			`Repositories -> DB -> TasksRepository -> FindByID -> row.Scan()`,
+			"error", err.Error(), "SQL", sql, "args", args,
+		)
+		return models.Task{}, err
+	}
+
+	return task, nil
+}
+
+func (repository *TasksRepository) GetActiveTasksWithoutDatetimeForUser(userID int64) ([]models.Task, error) {
+	query := repository.selectAllCols().
+		Where(
+			goqu.C("user_id").Eq(userID),
+			goqu.C("done").IsFalse(),
+			goqu.C("datetime").IsNull(),
+		).
+		Order(
+			goqu.C("datetime").Asc(),
+			goqu.C("title").Asc(),
 		)
 
 	sql, args, _ := query.Prepared(true).ToSQL()
@@ -315,7 +329,7 @@ func (repository *TasksRepository) FindByIDs(IDs []int64) ([]models.Task, error)
 		)
 		if err != nil {
 			repository.logger.Debugw(
-				`Repositories -> DB -> TasksRepository -> FindByIDs -> row.Scan()`,
+				`Repositories -> DB -> TasksRepository -> GetActiveTasksWithoutDatetimeForUser -> row.Scan()`,
 				"error", err.Error(),
 			)
 			return []models.Task{}, err

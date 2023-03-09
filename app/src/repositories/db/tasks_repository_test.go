@@ -399,7 +399,7 @@ func TestDeleteCompletedTasks(t *testing.T) {
 	}
 }
 
-func TestFindTasksByIDs(t *testing.T) {
+func TestGetActiveTasksWithoutDatetimeForUser(t *testing.T) {
 	repository, err := getTaskRepository()
 	if err != nil {
 		t.Fatal(err)
@@ -409,45 +409,27 @@ func TestFindTasksByIDs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	taskModel.Datetime = nil
 
-	task1, err := repository.Create(taskModel)
+	task, err := repository.Create(taskModel)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	task2, err := repository.Create(taskModel)
+	tasksWithoutDatetime, err := repository.GetActiveTasksWithoutDatetimeForUser(task.UserID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	ids := []int64{task1.ID, task2.ID}
-
-	tasks, err := repository.FindByIDs(ids)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(tasks) != 2 {
-		t.Fatal("the method should return two tasks, but did not return")
-	}
-
-	for _, task := range tasks {
-		if task.ID != task1.ID && task.ID != task2.ID {
-			t.Fatal("unknown task")
+	inSlice := false
+	for _, taskWithoutDatetime := range tasksWithoutDatetime {
+		if taskWithoutDatetime.ID == task.ID {
+			inSlice = true
+			break
 		}
 	}
 
-	err = repository.DeleteByID(task1.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = repository.DeleteByID(task2.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = deleteUserAfterTest(*taskModel.User)
-	if err != nil {
-		t.Fatal(err)
+	if !inSlice {
+		t.Fatal("task not found")
 	}
 }
