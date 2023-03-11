@@ -124,37 +124,49 @@ func (repository *NotificationsRepository) selectAllCols() *goqu.SelectDataset {
 		)
 }
 
-func (repository *NotificationsRepository) FindByTaskID(taskId int64) (models.Notification, error) {
+func (repository *NotificationsRepository) FindByTasksIDs(tasksIds []int64) (map[int64]models.Notification, error) {
 	query := repository.selectAllCols().
 		Where(
-			goqu.C("task_id").Eq(taskId),
+			goqu.C("task_id").In(tasksIds),
 		)
 
 	sql, args, _ := query.Prepared(true).ToSQL()
 
-	row := repository.dbInstance.QueryRow(context.Background(), sql, args...)
-
-	var notification models.Notification
-
-	err := row.Scan(
-		&notification.ID,
-		&notification.TaskID,
-		&notification.NotifyAt,
-		&notification.RepeatInterval,
-		&notification.CreatedAt,
-	)
+	rows, err := repository.dbInstance.Query(context.Background(), sql, args...)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			err = types.ErrNotFound
-		}
 		repository.logger.Debugw(
-			`Repositories -> DB -> NotificationsRepository -> FindByTaskID -> rows.Scan()`,
-			"error", err.Error(),
+			`Repositories -> DB -> NotificationsRepository -> FindByTasksIDs -> repository.dbInstance.Query(sql, args...)`,
+			"error", err.Error(), "sql", sql, "args", args,
 		)
-		return models.Notification{}, err
 	}
 
-	return notification, nil
+	tasksNotificationsMap := map[int64]models.Notification{}
+
+	for rows.Next() {
+		var notification models.Notification
+		err := rows.Scan(
+			&notification.ID,
+			&notification.TaskID,
+			&notification.NotifyAt,
+			&notification.RepeatInterval,
+			&notification.CreatedAt,
+		)
+
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				err = types.ErrNotFound
+			}
+			repository.logger.Debugw(
+				`Repositories -> DB -> NotificationsRepository -> FindByTasksIDs -> rows.Scan()`,
+				"error", err.Error(),
+			)
+			return map[int64]models.Notification{}, err
+		}
+
+		tasksNotificationsMap[notification.TaskID] = notification
+	}
+
+	return tasksNotificationsMap, nil
 }
 
 func (repository *NotificationsRepository) GetUpcoming(upcomingTo time.Time) ([]models.Notification, error) {

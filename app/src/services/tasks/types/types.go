@@ -29,3 +29,9 @@ type UpdateParams struct {
 	}
 	Done bool
 }
+
+type SearchByDateForUserParams struct {
+	From   *time.Time
+	To     *time.Time
+	UserID int64
+}

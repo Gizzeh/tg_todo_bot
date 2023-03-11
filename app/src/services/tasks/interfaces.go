@@ -17,5 +17,5 @@ type TasksRepositoryI interface {
 }
 
 type NotificationsRepositoryI interface {
-	FindByTaskID(taskId int64) (models.Notification, error)
+	FindByTasksIDs(tasksIDs []int64) (map[int64]models.Notification, error)
 }

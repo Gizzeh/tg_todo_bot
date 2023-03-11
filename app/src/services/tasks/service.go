@@ -7,6 +7,7 @@ import (
 	repositories_types "tg_todo_bot/src/repositories/types"
 	"tg_todo_bot/src/services/tasks/types"
 	services_types "tg_todo_bot/src/services/types"
+	"time"
 )
 
 type Service struct {
@@ -105,4 +106,181 @@ func (service *Service) Update(params types.UpdateParams) error {
 	}
 
 	return nil
+}
+
+//SearchByDateForUser (params) -> return map[DateWithoutTime][]models.Task
+func (service *Service) SearchByDateForUser(params types.SearchByDateForUserParams) (map[time.Time][]models.Task, error) {
+	service.logger.Info("Services -> Tasks -> SearchByDateForUser")
+
+	err := validateSearchByDateForUserParams(params)
+	if err != nil {
+		service.logger.Errorw(
+			"Services -> Tasks -> SearchByDateForUser -> validateSearchByDateForUserParams(params)",
+			"error", err.Error(), "params", params,
+		)
+		return map[time.Time][]models.Task{}, err
+	}
+
+	tasks, err := service.tasksRepository.SearchActiveByDatetimeForUser(params.From, params.To, params.UserID)
+	if err != nil {
+		service.logger.Errorw(
+			"Services -> Tasks -> SearchByDateForUser -> service.tasksRepository.SearchActiveByDatetimeForUser(from, to, userID)",
+			"error", err.Error(), "from", params.From, "to", params.To, "userID", params.UserID,
+		)
+		return map[time.Time][]models.Task{}, err
+	}
+
+	var tasksIDs []int64
+	for _, task := range tasks {
+		tasksIDs = append(tasksIDs, task.ID)
+	}
+
+	tasksNotificationsMap, err := service.notificationsRepository.FindByTasksIDs(tasksIDs)
+	if err != nil {
+		service.logger.Errorw(
+			"Services -> Tasks -> SearchByDateForUser -> service.notificationsRepository.FindByTasksIDs(tasksIDs)",
+			"error", err.Error(), "tasksIDs", tasksIDs,
+		)
+		return map[time.Time][]models.Task{}, err
+	}
+
+	dateTasksMap := map[time.Time][]models.Task{}
+
+	for _, task := range tasks {
+		notification, exist := tasksNotificationsMap[task.ID]
+		if exist {
+			task.Notification = &notification
+		}
+
+		y, m, d := task.Datetime.Date()
+		taskDate := time.Date(y, m, d, 0, 0, 0, 0, nil)
+		if tasksByDate, exist := dateTasksMap[taskDate]; exist {
+			tasksByDate = append(tasksByDate, task)
+		} else {
+			dateTasksMap[taskDate] = []models.Task{task}
+		}
+	}
+
+	return dateTasksMap, nil
+}
+
+func (service *Service) GetAllActiveForUser(userID int64) ([]models.Task, error) {
+	service.logger.Info("Services -> Tasks -> GetAllActiveForUser")
+
+	tasks, err := service.tasksRepository.GetAllActiveForUser(userID)
+	if err != nil {
+		service.logger.Errorw(
+			"Services -> Tasks -> SearchByDateForUser -> service.tasksRepository.GetAllActiveForUser(userID)",
+			"error", err.Error(), "userID", userID,
+		)
+		return []models.Task{}, err
+	}
+
+	err = service.setNotifications(tasks)
+	if err != nil {
+		service.logger.Errorw(
+			"Services -> Tasks -> SearchByDateForUser -> service.setNotifications(tasks)",
+			"error", err.Error(), "tasks", tasks,
+		)
+		return []models.Task{}, err
+	}
+
+	return tasks, nil
+}
+
+func (service *Service) setNotifications(tasks []models.Task) error {
+	var tasksIDs []int64
+	for _, task := range tasks {
+		tasksIDs = append(tasksIDs, task.ID)
+	}
+
+	tasksNotificationsMap, err := service.notificationsRepository.FindByTasksIDs(tasksIDs)
+	if err != nil {
+		service.logger.Errorw(
+			"Services -> Tasks -> getAndSetNotifications -> service.notificationsRepository.FindByTasksIDs(tasksIDs)",
+			"error", err.Error(), "tasksIDs", tasksIDs,
+		)
+		return err
+	}
+
+	for i, task := range tasks {
+		notification, exist := tasksNotificationsMap[task.ID]
+		if exist {
+			tasks[i].Notification = &notification
+		}
+	}
+
+	return nil
+}
+
+func (service *Service) GetActiveTasksWithoutDatetimeForUser(userID int64) ([]models.Task, error) {
+	service.logger.Info("Services -> Tasks -> GetAllActiveForUser")
+
+	tasks, err := service.tasksRepository.GetActiveTasksWithoutDatetimeForUser(userID)
+	if err != nil {
+		service.logger.Errorw(
+			"Services -> Tasks -> GetActiveTasksWithoutDatetimeForUser -> service.tasksRepository.GetActiveTasksWithoutDatetimeForUser(userID)",
+			"error", err.Error(), "userID", userID,
+		)
+		return []models.Task{}, err
+	}
+
+	err = service.setNotifications(tasks)
+	if err != nil {
+		service.logger.Errorw(
+			"Services -> Tasks -> GetActiveTasksWithoutDatetimeForUser -> service.setNotifications(tasks)",
+			"error", err.Error(), "tasks", tasks,
+		)
+		return []models.Task{}, err
+	}
+
+	return tasks, nil
+}
+
+func (service *Service) DeleteByID(taskID int64) error {
+	service.logger.Info("Services -> Tasks -> DeleteByID")
+
+	err := service.tasksRepository.DeleteByID(taskID)
+	if err != nil {
+		service.logger.Errorw(
+			"Services -> Tasks -> GetActiveTasksWithoutDatetimeForUser -> service.tasksRepository.DeleteByID(taskID)",
+			"error", err.Error(), "taskID", taskID,
+		)
+		return err
+	}
+
+	return nil
+}
+
+func (service *Service) DeleteCompleted() error {
+	service.logger.Info("Services -> Tasks -> DeleteCompleted")
+
+	err := service.tasksRepository.DeleteCompleted()
+	if err != nil {
+		service.logger.Errorw(
+			"Services -> Tasks -> DeleteCompleted -> service.tasksRepository.DeleteCompleted()",
+			"error", err.Error(),
+		)
+		return err
+	}
+
+	return nil
+}
+
+func (service *Service) FindByID(taskID int64) (models.Task, error) {
+	service.logger.Info("Services -> Tasks -> FindByID")
+
+	task, err := service.tasksRepository.FindByID(taskID)
+	if err != nil {
+		if errors.Is(err, repositories_types.ErrNotFound) {
+			err = services_types.ErrNotFound
+		}
+		service.logger.Errorw(
+			"Services -> Tasks -> FindByID -> service.tasksRepository.FindByID(taskID)",
+			"error", err.Error(),
+		)
+		return models.Task{}, err
+	}
+
+	return task, nil
 }

@@ -179,9 +179,14 @@ func TestGetTaskNotification(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	taskNotification, err := repository.FindByTaskID(notificationModel.TaskID)
+	tasksNotificationsMap, err := repository.FindByTasksIDs([]int64{notificationModel.TaskID})
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	taskNotification, exist := tasksNotificationsMap[notificationModel.TaskID]
+	if !exist {
+		t.Fatal("notification for task not found")
 	}
 
 	taskNotification.Task = notificationModel.Task

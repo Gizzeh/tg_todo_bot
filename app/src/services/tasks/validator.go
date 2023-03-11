@@ -48,3 +48,17 @@ func validateUpdateParams(params types.UpdateParams) error {
 
 	return nil
 }
+
+func validateSearchByDateForUserParams(params types.SearchByDateForUserParams) error {
+	if params.UserID == 0 {
+		err := fmt.Errorf("UserID can't be empty")
+		return err
+	}
+
+	if params.From == nil && params.To == nil {
+		err := fmt.Errorf("at least one of ['from', 'to'] must be not null")
+		return err
+	}
+
+	return nil
+}
